@@ -1,0 +1,86 @@
+[
+  {
+    "title": "Introducing the Model Context Protocol (MCP)",
+    "url": "https://modelcontextprotocol.io/introduction",
+    "snippet": "MCP is an open protocol that standardises how applications provide context, tools and prompts to LLMs, decoupling model clients from integrations.",
+    "keywords": ["mcp", "model context protocol", "tools", "resources", "prompts", "anthropic"]
+  },
+  {
+    "title": "MCP transports: stdio and streamable HTTP",
+    "url": "https://modelcontextprotocol.io/docs/concepts/transports",
+    "snippet": "How MCP clients and servers exchange JSON-RPC messages: stdio for local processes, streamable HTTP (with optional SSE) for remote servers.",
+    "keywords": ["mcp", "transport", "stdio", "streamable", "http", "sse", "json-rpc"]
+  },
+  {
+    "title": "Building MCP servers in Python with FastMCP",
+    "url": "https://github.com/modelcontextprotocol/python-sdk",
+    "snippet": "The official Python SDK: declare tools with type hints and docstrings, and FastMCP generates schemas and handles the protocol lifecycle.",
+    "keywords": ["fastmcp", "python", "sdk", "server", "decorator", "mcp"]
+  },
+  {
+    "title": "What is Retrieval-Augmented Generation?",
+    "url": "https://arxiv.org/abs/2005.11401",
+    "snippet": "RAG combines a retriever over an external corpus with a generator, grounding LLM answers in retrieved evidence to reduce hallucinations.",
+    "keywords": ["rag", "retrieval", "augmented", "generation", "grounding", "hallucinations"]
+  },
+  {
+    "title": "Chunking strategies for RAG pipelines",
+    "url": "https://www.pinecone.io/learn/chunking-strategies/",
+    "snippet": "Fixed-size, recursive and semantic chunking compared: how chunk size and overlap affect recall and answer quality in retrieval pipelines.",
+    "keywords": ["rag", "chunking", "chunk", "overlap", "splitting", "retrieval"]
+  },
+  {
+    "title": "Vector databases and pgvector for similarity search",
+    "url": "https://github.com/pgvector/pgvector",
+    "snippet": "Store embeddings in Postgres with pgvector: HNSW and IVFFlat indexes, cosine distance operators and trade-offs versus dedicated vector stores.",
+    "keywords": ["vector", "database", "pgvector", "postgres", "similarity", "search", "hnsw"]
+  },
+  {
+    "title": "Text embeddings explained",
+    "url": "https://platform.openai.com/docs/guides/embeddings",
+    "snippet": "Embeddings map text to dense vectors so that semantic similarity becomes geometric closeness; the backbone of retrieval and clustering.",
+    "keywords": ["embeddings", "vectors", "cosine", "similarity", "semantic"]
+  },
+  {
+    "title": "LLM agents: planning, memory and tool use",
+    "url": "https://lilianweng.github.io/posts/2023-06-23-agent/",
+    "snippet": "An agent wraps an LLM in a loop of planning, tool calls and reflection; covers ReAct, task decomposition and memory architectures.",
+    "keywords": ["agents", "planning", "react", "loop", "memory", "autonomous"]
+  },
+  {
+    "title": "Designing tools that LLMs can actually use",
+    "url": "https://www.anthropic.com/engineering/writing-tools-for-agents",
+    "snippet": "Practical guidance on tool naming, argument schemas and docstrings: the model chooses tools based on descriptions, so write them for the model.",
+    "keywords": ["tools", "tool", "design", "descriptions", "schema", "agents", "llm"]
+  },
+  {
+    "title": "Function calling and structured outputs",
+    "url": "https://platform.openai.com/docs/guides/function-calling",
+    "snippet": "How models emit JSON arguments for declared functions, and how strict schemas plus validation make tool invocation reliable.",
+    "keywords": ["function", "calling", "json", "schema", "structured", "outputs"]
+  },
+  {
+    "title": "Prompt engineering fundamentals",
+    "url": "https://www.promptingguide.ai/",
+    "snippet": "System prompts, few-shot examples, chain-of-thought and other patterns that reliably steer model behaviour across providers.",
+    "keywords": ["prompt", "engineering", "few-shot", "system", "chain-of-thought"]
+  },
+  {
+    "title": "Evaluating LLM applications",
+    "url": "https://hamel.dev/blog/posts/evals/",
+    "snippet": "From unit-style assertions to LLM-as-judge: building an evaluation loop that catches regressions in prompts, retrieval and tools.",
+    "keywords": ["evaluation", "evals", "llm", "metrics", "judge", "testing"]
+  },
+  {
+    "title": "Prompt injection and LLM security",
+    "url": "https://simonwillison.net/series/prompt-injection/",
+    "snippet": "Why prompt injection is the key attack class for tool-using LLMs, and which mitigations (least privilege, sandboxing, human review) actually help.",
+    "keywords": ["security", "prompt", "injection", "guardrails", "sandbox", "safety"]
+  },
+  {
+    "title": "Fine-tuning versus RAG: when to use which",
+    "url": "https://arxiv.org/abs/2312.05934",
+    "snippet": "Comparing parameter updates against retrieval for injecting knowledge: cost, freshness and hallucination behaviour of each approach.",
+    "keywords": ["fine-tuning", "rag", "lora", "knowledge", "comparison"]
+  }
+]
