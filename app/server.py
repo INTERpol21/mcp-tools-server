@@ -136,13 +136,13 @@ def _run_http(server: FastMCP) -> None:
         server.run(transport="sse")
 
 
-# Module-level instance so `mcp dev app/server.py` (MCP Inspector) finds it.
-# Cheap to construct: no I/O happens until a tool is actually called.
+# Module-level instance so `mcp dev app/server.py` (MCP Inspector) finds it;
+# constructing it does no I/O.
 server = create_server()
 
 
 def main(argv: "list[str] | None" = None) -> None:
-    """CLI entry point: parse the transport flag and run the server."""
+    """CLI entry point."""
     parser = argparse.ArgumentParser(
         prog="python -m app.server",
         description="Run the portfolio-tools MCP server.",

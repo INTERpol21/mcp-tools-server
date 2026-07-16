@@ -41,13 +41,12 @@ _READ_ONLY_MESSAGE = (
 
 def _authorizer(
     action: int,
-    arg1: "str | None",
-    arg2: "str | None",
-    db_name: "str | None",
-    trigger: "str | None",
+    _arg1: "str | None",
+    _arg2: "str | None",
+    _db_name: "str | None",
+    _trigger: "str | None",
 ) -> int:
     """SQLite authorizer hook: allow read operations, deny everything else."""
-    del arg1, arg2, db_name, trigger  # part of the sqlite3 callback contract
     if action in _ALLOWED_ACTIONS:
         return sqlite3.SQLITE_OK
     return sqlite3.SQLITE_DENY
@@ -80,19 +79,10 @@ def _to_json_value(value: object) -> object:
 def query_database(
     sql: str, max_rows: int = DEFAULT_MAX_ROWS, *, db_path: Path
 ) -> dict[str, Any]:
-    """Execute a single read-only SELECT statement and return its rows.
+    """Execute a single read-only SELECT statement and return capped rows.
 
-    Args:
-        sql: Exactly one SELECT statement.
-        max_rows: Row cap for the result set (clamped to 1..200).
-        db_path: Demo database location; seeded automatically if missing.
-
-    Returns:
-        Dict with ``columns``, ``rows``, ``row_count`` and ``truncated``.
-
-    Raises:
-        ToolError: For empty input, multi-statement payloads, non-SELECT
-            statements and any SQL error (clear message, no traceback).
+    Raises ToolError for empty input, multi-statement payloads, non-SELECT
+    statements and any SQL error -- one clear line, never a traceback.
     """
     if not sql or not sql.strip():
         raise ToolError("SQL query must not be empty.")
@@ -115,7 +105,10 @@ def query_database(
             columns = [description[0] for description in cursor.description]
             fetched = cursor.fetchmany(limit + 1)
         except (sqlite3.Error, sqlite3.Warning) as exc:
-            if "not authorized" in str(exc).lower():
+            # SQLite phrases authorizer denials two ways: "not authorized"
+            # (statements) and "authorization denied" (pragma functions).
+            message = str(exc).lower()
+            if "not authorized" in message or "authorization denied" in message:
                 raise ToolError(_READ_ONLY_MESSAGE) from exc
             raise ToolError(f"SQL error: {exc}") from exc
         truncated = len(fetched) > limit

@@ -197,7 +197,8 @@ The suite is fully offline: no network, no API keys. Unit tests hit the
 pure functions in `app/tools/` directly; integration tests run a real MCP
 client session against the server **in memory** via the SDK's
 `create_connected_server_and_client_session` helper (same one the SDK's own
-test-suite uses), covering `list_tools` and a `call_tool` round-trip.
+test-suite uses), covering `list_tools`, a `call_tool` round-trip and
+error mapping (`ToolError` -> `isError`, no tracebacks).
 
 ## Project layout
 

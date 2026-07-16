@@ -7,6 +7,7 @@ lazily on the first ``query_database`` call.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 
@@ -74,8 +75,10 @@ _APPLICATIONS: list[tuple[int, int, str, str]] = [
 def ensure_database(db_path: Path) -> bool:
     """Create and seed the demo database if it does not exist yet.
 
-    Idempotent: an existing file is left untouched. A partially written file
-    is removed on failure so the next call can start clean.
+    Idempotent: an existing file is left untouched. Data is written to a
+    process-unique temp file and moved into place with an atomic rename,
+    so a failed or concurrent seed never leaves (or deletes) a partial
+    database.
 
     Returns:
         True if the database was created, False if it already existed.
@@ -83,7 +86,8 @@ def ensure_database(db_path: Path) -> bool:
     if db_path.exists():
         return False
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(db_path)
+    tmp_path = db_path.with_name(f"{db_path.name}.{os.getpid()}.tmp")
+    connection = sqlite3.connect(tmp_path)
     try:
         with connection:
             connection.executescript(_SCHEMA)
@@ -97,10 +101,11 @@ def ensure_database(db_path: Path) -> bool:
                 "INSERT INTO applications VALUES (?, ?, ?, ?)", _APPLICATIONS
             )
     except BaseException:
-        db_path.unlink(missing_ok=True)
-        raise
-    finally:
         connection.close()
+        tmp_path.unlink(missing_ok=True)
+        raise
+    connection.close()
+    os.replace(tmp_path, db_path)
     return True
 
 

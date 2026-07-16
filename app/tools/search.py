@@ -32,9 +32,14 @@ def _tokenize(text: str) -> set[str]:
 def _load_index(index_path: Path) -> list[dict[str, Any]]:
     """Load and minimally validate the JSON search index."""
     if not index_path.is_file():
-        raise ToolError(f"Search index not found at '{index_path}'.")
-    with index_path.open(encoding="utf-8") as handle:
-        entries = json.load(handle)
+        raise ToolError(
+            "Search index not found; expected search_index.json in the data directory."
+        )
+    try:
+        with index_path.open(encoding="utf-8") as handle:
+            entries = json.load(handle)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ToolError("Search index is malformed: not valid JSON.") from exc
     if not isinstance(entries, list):
         raise ToolError("Search index is malformed: expected a JSON array of entries.")
     return entries
@@ -50,18 +55,10 @@ def _score(query_tokens: set[str], entry: dict[str, Any]) -> int:
 
 
 def search_web(query: str, max_results: int = 5, *, index_path: Path) -> dict[str, Any]:
-    """Rank curated index entries against ``query`` and return the best hits.
+    """Rank curated index entries against ``query``, best match first.
 
-    Args:
-        query: Free-text query, e.g. ``"rag chunking strategies"``.
-        max_results: Maximum number of results (clamped to 1..20).
-        index_path: Location of ``search_index.json``.
-
-    Returns:
-        Dict with ``results`` (best first), ``total_matches`` and ``source``.
-
-    Raises:
-        ToolError: If the query is empty or the index is missing/malformed.
+    Ties break on index order, so output is fully deterministic. Raises
+    ToolError for empty/tokenless queries and a missing/malformed index.
     """
     if not query or not query.strip():
         raise ToolError("Query must be a non-empty string.")

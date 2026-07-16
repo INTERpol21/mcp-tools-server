@@ -1,10 +1,9 @@
 """Sandboxed filesystem tools: read files and list directories under DATA_DIR.
 
-Sandbox rules: every user-supplied path is fully resolved (symlinks and
-``..`` included) and must stay inside the configured data directory, checked
-with ``Path.is_relative_to`` on the resolved paths. Anything else -- parent
-traversal, absolute paths outside the sandbox, symlink escapes -- is denied
-with a clear error message.
+Sandbox rule: every user-supplied path is fully resolved (symlinks and
+``..`` included) and the result must stay inside the configured data
+directory, checked with ``Path.is_relative_to`` on resolved paths.
+Error messages echo the caller's path, never absolute host paths.
 """
 
 from __future__ import annotations
@@ -14,22 +13,19 @@ from typing import Any
 
 from app.tools.errors import ToolError
 
-MAX_FILE_BYTES = 100 * 1024  # 100 KiB read cap
+MAX_FILE_BYTES = 100 * 1024
 
 
 def _resolve_inside_sandbox(path: str, data_dir: Path) -> tuple[Path, Path]:
-    """Resolve ``path`` against the sandbox root and enforce containment.
-
-    Returns:
-        Tuple of (resolved target, resolved sandbox base).
-
-    Raises:
-        ToolError: If the resolved target escapes the sandbox.
-    """
+    """Resolve ``path`` against the sandbox root; deny anything that escapes."""
     base = data_dir.resolve()
     raw = Path(path)
     candidate = raw if raw.is_absolute() else base / raw
-    resolved = candidate.resolve()
+    try:
+        resolved = candidate.resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        # Unresolvable input: symlink loops, NUL bytes, over-long paths.
+        raise ToolError(f"Invalid path: {path!r}.") from exc
     if not resolved.is_relative_to(base):
         raise ToolError(f"Access denied: '{path}' escapes the data directory sandbox.")
     return resolved, base
@@ -41,19 +37,7 @@ def _display_path(resolved: Path, base: Path) -> str:
 
 
 def read_file(path: str, *, data_dir: Path) -> dict[str, Any]:
-    """Read a UTF-8 text file located inside the data directory.
-
-    Args:
-        path: Path relative to the data directory (absolute paths must
-            already point inside it).
-        data_dir: Sandbox root.
-
-    Returns:
-        Dict with ``path`` (sandbox-relative), ``size_bytes`` and ``content``.
-
-    Raises:
-        ToolError: On sandbox escape, missing file, oversize or binary file.
-    """
+    """Read a UTF-8 text file inside the sandbox, capped at MAX_FILE_BYTES."""
     resolved, base = _resolve_inside_sandbox(path, data_dir)
     if not resolved.exists():
         raise ToolError(
@@ -61,12 +45,17 @@ def read_file(path: str, *, data_dir: Path) -> dict[str, Any]:
         )
     if resolved.is_dir():
         raise ToolError(f"'{path}' is a directory; use list_dir to browse it.")
-    size = resolved.stat().st_size
-    if size > MAX_FILE_BYTES:
+    try:
+        size = resolved.stat().st_size
+        if size > MAX_FILE_BYTES:
+            raise ToolError(
+                f"File too large: {size} bytes (limit is {MAX_FILE_BYTES} bytes)."
+            )
+        raw_bytes = resolved.read_bytes()
+    except OSError as exc:
         raise ToolError(
-            f"File too large: {size} bytes (limit is {MAX_FILE_BYTES} bytes)."
-        )
-    raw_bytes = resolved.read_bytes()
+            f"Could not read '{path}': {exc.strerror or type(exc).__name__}."
+        ) from exc
     if b"\x00" in raw_bytes:
         raise ToolError(
             f"'{path}' looks like a binary file; only UTF-8 text is supported."
@@ -83,39 +72,30 @@ def read_file(path: str, *, data_dir: Path) -> dict[str, Any]:
 
 
 def list_dir(path: str = ".", *, data_dir: Path) -> dict[str, Any]:
-    """List a directory inside the data directory (directories first).
-
-    Args:
-        path: Directory path relative to the data directory; defaults to
-            the sandbox root itself.
-        data_dir: Sandbox root.
-
-    Returns:
-        Dict with ``path``, sorted ``entries`` ({name, type, size_bytes})
-        and ``count``.
-
-    Raises:
-        ToolError: On sandbox escape, missing directory, or a file path.
-    """
+    """List a directory inside the sandbox, directories first."""
     resolved, base = _resolve_inside_sandbox(path, data_dir)
     if not resolved.exists():
         raise ToolError(f"Directory not found: '{path}'.")
     if not resolved.is_dir():
         raise ToolError(f"'{path}' is a file; use read_file to read it.")
-
-    children = sorted(
-        resolved.iterdir(),
-        key=lambda child: (not child.is_dir(), child.name.lower()),
-    )
-    entries: list[dict[str, Any]] = []
-    for child in children:
-        entry: dict[str, Any] = {
-            "name": child.name,
-            "type": "dir" if child.is_dir() else "file",
-        }
-        if child.is_file():
-            entry["size_bytes"] = child.stat().st_size
-        entries.append(entry)
+    try:
+        children = sorted(
+            resolved.iterdir(),
+            key=lambda child: (not child.is_dir(), child.name.lower()),
+        )
+        entries: list[dict[str, Any]] = []
+        for child in children:
+            entry: dict[str, Any] = {
+                "name": child.name,
+                "type": "dir" if child.is_dir() else "file",
+            }
+            if child.is_file():
+                entry["size_bytes"] = child.stat().st_size
+            entries.append(entry)
+    except OSError as exc:
+        raise ToolError(
+            f"Could not list '{path}': {exc.strerror or type(exc).__name__}."
+        ) from exc
     return {
         "path": _display_path(resolved, base),
         "entries": entries,
