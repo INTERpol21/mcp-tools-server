@@ -63,3 +63,16 @@ async def test_call_search_web_over_mcp() -> None:
         )
         assert "results" in text
         assert "modelcontextprotocol.io" in text
+
+
+async def test_tool_error_maps_to_protocol_error() -> None:
+    """A sandbox violation surfaces as a protocol-level tool error:
+    isError=True, the ToolError message, and no traceback."""
+    async with connected_session(_make_low_level_server()) as session:
+        result = await session.call_tool("read_file", {"path": "../secret.txt"})
+        assert result.isError is True
+        text = "".join(
+            block.text for block in result.content if block.type == "text"
+        )
+        assert "sandbox" in text
+        assert "Traceback" not in text
