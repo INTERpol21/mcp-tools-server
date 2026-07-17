@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from pathlib import Path
 
 import pytest
 
-from app.tools.database import _connect_read_only, query_database
+from app.tools.database import (
+    MAX_CELL_BYTES,
+    MAX_SQL_CHARS,
+    _connect_read_only,
+    query_database,
+)
 from app.tools.errors import ToolError
 from app.tools.seed import ensure_database
 
@@ -123,3 +129,78 @@ def test_row_cap_enforced(db_path: Path) -> None:
 def test_empty_sql_rejected(db_path: Path) -> None:
     with pytest.raises(ToolError, match="empty"):
         query_database("   ", db_path=db_path)
+
+
+# --------------------------------------------------------------------------- #
+# Hostile-input hardening (adversarial regression tests)
+# --------------------------------------------------------------------------- #
+
+
+def test_oversized_sql_rejected(db_path: Path) -> None:
+    ensure_database(db_path)
+    huge = "SELECT " + " OR ".join(["1=1"] * 12000)  # ~84 KB
+    assert len(huge) > MAX_SQL_CHARS
+    with pytest.raises(ToolError, match="too long"):
+        query_database(huge, db_path=db_path)
+
+
+def test_deeply_nested_select_surfaces_clean_toolerror(db_path: Path) -> None:
+    """SQLite's own depth/parser limit must surface as a ToolError, not a crash."""
+    ensure_database(db_path)
+    sql = "SELECT " + "(SELECT " * 1000 + "1" + ")" * 1000
+    assert len(sql) <= MAX_SQL_CHARS  # passes the length gate; sqlite rejects it
+    with pytest.raises(ToolError) as excinfo:
+        query_database(sql, db_path=db_path)
+    assert "Traceback" not in str(excinfo.value)
+
+
+def test_single_huge_blob_cell_is_refused(db_path: Path) -> None:
+    """A row conjuring a huge blob is refused; the row-count cap alone would
+    let a single oversized cell through."""
+    ensure_database(db_path)
+    with pytest.raises(ToolError, match="too large"):
+        query_database(f"SELECT randomblob({MAX_CELL_BYTES + 1000})", db_path=db_path)
+
+
+def test_small_blob_is_summarised_not_crashing(db_path: Path) -> None:
+    ensure_database(db_path)
+    result = query_database("SELECT zeroblob(10) AS b", db_path=db_path)
+    assert result["rows"] == [["<blob: 10 bytes>"]]
+
+
+def test_unicode_identifier_is_handled(db_path: Path) -> None:
+    ensure_database(db_path)
+    result = query_database('SELECT 1 AS "столбец"', db_path=db_path)
+    assert result["columns"] == ["столбец"]
+    assert result["rows"] == [[1]]
+
+
+def test_comment_only_and_bare_semicolons_rejected(db_path: Path) -> None:
+    ensure_database(db_path)
+    with pytest.raises(ToolError, match="no result set"):
+        query_database("-- just a comment", db_path=db_path)
+    with pytest.raises(ToolError, match="[Mm]ultiple"):
+        query_database(";;;", db_path=db_path)
+
+
+def test_concurrent_first_run_seeding_is_race_safe(tmp_path: Path) -> None:
+    """10 threads querying an unseeded database must all seed/read cleanly:
+    no 'table already exists' collision, no partial-db reads."""
+    fresh = tmp_path / "race.db"
+    results: list[int] = []
+    errors: list[str] = []
+
+    def worker() -> None:
+        try:
+            result = query_database("SELECT COUNT(*) FROM companies", db_path=fresh)
+            results.append(result["rows"][0][0])
+        except Exception as exc:  # noqa: BLE001 - we assert there are none
+            errors.append(repr(exc))
+
+    threads = [threading.Thread(target=worker) for _ in range(10)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == []
+    assert results == [6] * 10

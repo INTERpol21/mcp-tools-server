@@ -22,6 +22,13 @@ from app.tools.seed import ensure_database
 DEFAULT_MAX_ROWS = 50
 HARD_ROW_CAP = 200
 
+# Input/output size bounds. The row-count cap alone does not bound *size*: a
+# single row can conjure arbitrary bytes via zeroblob()/randomblob(), so cap
+# the raw SQL length up front and the materialised result as it streams in.
+MAX_SQL_CHARS = 20_000
+MAX_CELL_BYTES = 1_000_000  # 1 MB per cell (blobs are still summarised, not returned)
+MAX_RESULT_BYTES = 8_000_000  # 8 MB of materialised cell data per query
+
 # SQLITE_RECURSIVE is needed for WITH RECURSIVE; the constant is missing from
 # some older sqlite3 builds, so fall back to its numeric value (33).
 _ALLOWED_ACTIONS = frozenset(
@@ -71,9 +78,16 @@ def _connect_read_only(db_path: Path) -> sqlite3.Connection:
 
 def _to_json_value(value: object) -> object:
     """Make a SQLite cell value JSON-serialisable."""
-    if isinstance(value, bytes):
+    if isinstance(value, (bytes, bytearray)):
         return f"<blob: {len(value)} bytes>"
     return value
+
+
+def _value_bytes(value: object) -> int:
+    """Approximate materialised size of a cell, for the result-size budget."""
+    if isinstance(value, (bytes, bytearray, str)):
+        return len(value)
+    return 8  # numbers / NULL: small fixed cost
 
 
 def query_database(
@@ -86,6 +100,10 @@ def query_database(
     """
     if not sql or not sql.strip():
         raise ToolError("SQL query must not be empty.")
+    if len(sql) > MAX_SQL_CHARS:
+        raise ToolError(
+            f"SQL query too long: {len(sql)} chars exceeds the {MAX_SQL_CHARS}-char limit."
+        )
     if _has_multiple_statements(sql):
         raise ToolError(
             "Multiple SQL statements are not allowed; send exactly one SELECT statement."
@@ -103,7 +121,33 @@ def query_database(
                     "Statement produced no result set; only SELECT queries are supported."
                 )
             columns = [description[0] for description in cursor.description]
-            fetched = cursor.fetchmany(limit + 1)
+            # Stream row-by-row so an oversized cell is caught after a single
+            # fetch, before it can be amplified across many rows.
+            rows: list[list[Any]] = []
+            truncated = False
+            total_bytes = 0
+            while True:
+                raw_row = cursor.fetchone()
+                if raw_row is None:
+                    break
+                if len(rows) >= limit:
+                    truncated = True
+                    break
+                json_row: list[Any] = []
+                for value in raw_row:
+                    if isinstance(value, (bytes, bytearray, str)) and len(value) > MAX_CELL_BYTES:
+                        raise ToolError(
+                            f"Result cell too large: {len(value)} bytes exceeds the "
+                            f"{MAX_CELL_BYTES}-byte limit; narrow the query."
+                        )
+                    total_bytes += _value_bytes(value)
+                    json_row.append(_to_json_value(value))
+                if total_bytes > MAX_RESULT_BYTES:
+                    raise ToolError(
+                        f"Result too large: over {MAX_RESULT_BYTES} bytes materialised; "
+                        "add a tighter filter or lower max_rows."
+                    )
+                rows.append(json_row)
         except (sqlite3.Error, sqlite3.Warning) as exc:
             # SQLite phrases authorizer denials two ways: "not authorized"
             # (statements) and "authorization denied" (pragma functions).
@@ -111,8 +155,6 @@ def query_database(
             if "not authorized" in message or "authorization denied" in message:
                 raise ToolError(_READ_ONLY_MESSAGE) from exc
             raise ToolError(f"SQL error: {exc}") from exc
-        truncated = len(fetched) > limit
-        rows = [[_to_json_value(value) for value in row] for row in fetched[:limit]]
         return {
             "columns": columns,
             "rows": rows,

@@ -84,3 +84,52 @@ def test_list_dir_happy_path_sorted(sandbox: Path) -> None:
 def test_list_dir_blocks_escape(sandbox: Path) -> None:
     with pytest.raises(ToolError, match="sandbox"):
         list_dir("..", data_dir=sandbox)
+
+
+# --------------------------------------------------------------------------- #
+# Hostile-input hardening (adversarial regression tests)
+# --------------------------------------------------------------------------- #
+
+
+def test_read_file_dotdot_resolving_inside_is_allowed(sandbox: Path) -> None:
+    """'..' segments that still resolve *inside* the sandbox are legitimate."""
+    result = read_file("docs/../docs/notes.md", data_dir=sandbox)
+    assert "hello from the sandbox" in result["content"]
+    assert result["path"] == "docs/notes.md"
+
+
+def test_read_file_trailing_slash_on_file_reads_it(sandbox: Path) -> None:
+    """A trailing slash resolves to the file itself and reads safely."""
+    result = read_file("docs/notes.md/", data_dir=sandbox)
+    assert result["path"] == "docs/notes.md"
+
+
+def test_read_file_newline_in_name_is_clean_error(sandbox: Path) -> None:
+    with pytest.raises(ToolError, match="not found"):
+        read_file("docs/no\nte.md", data_dir=sandbox)
+
+
+def test_read_file_long_name_is_clean_error(sandbox: Path) -> None:
+    with pytest.raises(ToolError, match="not found"):
+        read_file("a" * 200 + ".md", data_dir=sandbox)
+
+
+@pytest.mark.parametrize("path", [".", ""])
+def test_read_file_on_directory_path_redirects_to_list_dir(sandbox: Path, path: str) -> None:
+    with pytest.raises(ToolError, match="directory"):
+        read_file(path, data_dir=sandbox)
+
+
+def test_list_dir_on_a_file_is_clean_error(sandbox: Path) -> None:
+    with pytest.raises(ToolError, match="is a file"):
+        list_dir("docs/notes.md", data_dir=sandbox)
+
+
+def test_list_dir_deep_nonexistent_is_clean_error(sandbox: Path) -> None:
+    with pytest.raises(ToolError, match="not found"):
+        list_dir("a/b/c/d/e/f/g", data_dir=sandbox)
+
+
+def test_list_dir_dotdot_escape_blocked(sandbox: Path) -> None:
+    with pytest.raises(ToolError, match="sandbox"):
+        list_dir("docs/../..", data_dir=sandbox)

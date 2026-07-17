@@ -17,6 +17,7 @@ from typing import Any
 from app.tools.errors import ToolError
 
 MAX_RESULTS_CAP = 20
+MAX_QUERY_CHARS = 2_000
 
 _TOKEN_RE = re.compile(r"[^\W_]+")
 
@@ -62,6 +63,10 @@ def search_web(query: str, max_results: int = 5, *, index_path: Path) -> dict[st
     """
     if not query or not query.strip():
         raise ToolError("Query must be a non-empty string.")
+    if len(query) > MAX_QUERY_CHARS:
+        raise ToolError(
+            f"Query too long: {len(query)} chars exceeds the {MAX_QUERY_CHARS}-char limit."
+        )
     query_tokens = _tokenize(query)
     if not query_tokens:
         raise ToolError("Query contains no searchable terms.")
