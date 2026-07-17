@@ -4,7 +4,7 @@ install:
 	pip install -r requirements.txt
 
 install-dev: install
-	pip install pytest pytest-asyncio ruff
+	pip install -r requirements-dev.txt
 
 run: run-http  ## platform default: streamable HTTP on :8082 (endpoint /mcp)
 
