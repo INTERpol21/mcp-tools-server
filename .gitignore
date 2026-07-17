@@ -16,4 +16,5 @@ venv/
 
 # Generated artifacts (recreated by app/tools/seed.py)
 data/demo.db
+data/demo.db.*
 .DS_Store

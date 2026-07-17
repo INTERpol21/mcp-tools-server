@@ -14,10 +14,30 @@ import re
 from pathlib import Path
 from typing import Any
 
+from typing_extensions import TypedDict
+
 from app.tools.errors import ToolError
 
 MAX_RESULTS_CAP = 20
 MAX_QUERY_CHARS = 2_000
+
+
+class SearchHit(TypedDict):
+    """One ranked entry from the offline index."""
+
+    title: str
+    url: str
+    snippet: str
+    score: int
+
+
+class SearchWebResult(TypedDict):
+    """Shape of a ``search_web`` response (drives MCP structured output)."""
+
+    query: str
+    results: list[SearchHit]
+    total_matches: int
+    source: str
 
 _TOKEN_RE = re.compile(r"[^\W_]+")
 
@@ -55,7 +75,9 @@ def _score(query_tokens: set[str], entry: dict[str, Any]) -> int:
     )
 
 
-def search_web(query: str, max_results: int = 5, *, index_path: Path) -> dict[str, Any]:
+def search_web(
+    query: str, max_results: int = 5, *, index_path: Path
+) -> SearchWebResult:
     """Rank curated index entries against ``query``, best match first.
 
     Ties break on index order, so output is fully deterministic. Raises
@@ -79,7 +101,7 @@ def search_web(query: str, max_results: int = 5, *, index_path: Path) -> dict[st
             scored.append((score, position, entry))
     scored.sort(key=lambda item: (-item[0], item[1]))
 
-    results = [
+    results: list[SearchHit] = [
         {
             "title": entry.get("title", ""),
             "url": entry.get("url", ""),

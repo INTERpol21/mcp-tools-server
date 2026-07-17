@@ -16,11 +16,22 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from typing_extensions import TypedDict
+
 from app.tools.errors import ToolError
 from app.tools.seed import ensure_database
 
 DEFAULT_MAX_ROWS = 50
 HARD_ROW_CAP = 200
+
+
+class QueryDatabaseResult(TypedDict):
+    """Shape of a successful ``query_database`` call (drives MCP structured output)."""
+
+    columns: list[str]
+    rows: list[list[Any]]
+    row_count: int
+    truncated: bool
 
 # Input/output size bounds. The row-count cap alone does not bound *size*: a
 # single row can conjure arbitrary bytes via zeroblob()/randomblob(), so cap
@@ -92,7 +103,7 @@ def _value_bytes(value: object) -> int:
 
 def query_database(
     sql: str, max_rows: int = DEFAULT_MAX_ROWS, *, db_path: Path
-) -> dict[str, Any]:
+) -> QueryDatabaseResult:
     """Execute a single read-only SELECT statement and return capped rows.
 
     Raises ToolError for empty input, multi-statement payloads, non-SELECT

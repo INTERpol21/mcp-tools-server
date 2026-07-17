@@ -9,11 +9,36 @@ Error messages echo the caller's path, never absolute host paths.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+
+from typing_extensions import NotRequired, TypedDict
 
 from app.tools.errors import ToolError
 
 MAX_FILE_BYTES = 100 * 1024
+
+
+class ReadFileResult(TypedDict):
+    """Shape of a successful ``read_file`` call (drives MCP structured output)."""
+
+    path: str
+    size_bytes: int
+    content: str
+
+
+class DirEntry(TypedDict):
+    """One ``list_dir`` entry; ``size_bytes`` is present for files only."""
+
+    name: str
+    type: str
+    size_bytes: NotRequired[int]
+
+
+class ListDirResult(TypedDict):
+    """Shape of a successful ``list_dir`` call (drives MCP structured output)."""
+
+    path: str
+    entries: list[DirEntry]
+    count: int
 
 
 def _resolve_inside_sandbox(path: str, data_dir: Path) -> tuple[Path, Path]:
@@ -36,7 +61,7 @@ def _display_path(resolved: Path, base: Path) -> str:
     return "." if resolved == base else resolved.relative_to(base).as_posix()
 
 
-def read_file(path: str, *, data_dir: Path) -> dict[str, Any]:
+def read_file(path: str, *, data_dir: Path) -> ReadFileResult:
     """Read a UTF-8 text file inside the sandbox, capped at MAX_FILE_BYTES."""
     resolved, base = _resolve_inside_sandbox(path, data_dir)
     if not resolved.exists():
@@ -71,7 +96,7 @@ def read_file(path: str, *, data_dir: Path) -> dict[str, Any]:
     }
 
 
-def list_dir(path: str = ".", *, data_dir: Path) -> dict[str, Any]:
+def list_dir(path: str = ".", *, data_dir: Path) -> ListDirResult:
     """List a directory inside the sandbox, directories first."""
     resolved, base = _resolve_inside_sandbox(path, data_dir)
     if not resolved.exists():
@@ -83,9 +108,9 @@ def list_dir(path: str = ".", *, data_dir: Path) -> dict[str, Any]:
             resolved.iterdir(),
             key=lambda child: (not child.is_dir(), child.name.lower()),
         )
-        entries: list[dict[str, Any]] = []
+        entries: list[DirEntry] = []
         for child in children:
-            entry: dict[str, Any] = {
+            entry: DirEntry = {
                 "name": child.name,
                 "type": "dir" if child.is_dir() else "file",
             }

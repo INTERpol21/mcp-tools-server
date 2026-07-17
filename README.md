@@ -6,7 +6,7 @@ MCP server on the official Python SDK (FastMCP): four tools, stdio and streamabl
 
 ## What this demonstrates
 
-- MCP servers with the official SDK: tools, schemas, lifecycle, both transports.
+- MCP servers with the official SDK: tools, resources, schemas, lifecycle, both transports.
 - Tool design for LLMs: names, argument schemas and docstrings are the interface the model reasons over, so descriptions carry the DB schema, examples and constraints on purpose.
 - SQL locked to read-only via a SQLite authorizer rather than regex filtering, plus multi-statement injection rejection.
 - A filesystem sandbox built on `resolve()` + `is_relative_to`, with size caps and binary detection.
@@ -31,6 +31,9 @@ flowchart LR
 | `query_database` | `sql`, `max_rows=50` | `{columns, rows, row_count, truncated}` — single SELECT over the demo DB |
 | `read_file` | `path` | UTF-8 file content inside the sandbox, 100 KB cap |
 | `list_dir` | `path="."` | sorted entries with type and size |
+
+All four tools declare TypedDict results, so responses ship as machine-readable `structuredContent` (with an output schema) alongside the usual JSON text.
+The files in `data/docs/` are also published as MCP resources — concrete `docs://<file>` entries plus a `docs://{name}` template; resource reads go through `read_file`'s sandbox and size cap.
 
 Demo DB (seeded on first query, ~25 rows of job-market data): `companies(id, name, industry, city)`, `vacancies(id, company_id, title, grade, salary_rub, stack)`, `applications(id, vacancy_id, applied_at, status)`.
 
@@ -78,7 +81,7 @@ Read from the process environment, no dotenv (see `.env.example`): `DATA_DIR` �
 
 ## Testing
 
-36 tests, offline: units hit the pure functions directly; integration runs a real MCP client against the server in memory via the SDK's `create_connected_server_and_client_session`.
+68 tests, offline: units hit the pure functions directly; integration runs a real MCP client against the server in memory via the SDK's `create_connected_server_and_client_session` — tools, structured output, resources and error mapping included.
 `make install-dev && make test`; `make lint` for ruff.
 
 ---

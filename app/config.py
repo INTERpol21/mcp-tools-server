@@ -36,6 +36,11 @@ class Settings:
         """Location of the demo SQLite database used by ``query_database``."""
         return self.data_dir / "demo.db"
 
+    @property
+    def docs_dir(self) -> Path:
+        """Directory whose files are published as ``docs://`` MCP resources."""
+        return self.data_dir / "docs"
+
 
 def load_settings() -> Settings:
     """Build :class:`Settings` from the process environment."""
