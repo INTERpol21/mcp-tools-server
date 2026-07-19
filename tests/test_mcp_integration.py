@@ -40,7 +40,7 @@ EXPECTED_DOC_RESOURCES = {
 }
 
 
-def _make_low_level_server(data_dir: "Path | None" = None):
+def _make_low_level_server(data_dir: Path | None = None):
     """Server over the repo's data directory, or a caller-supplied one.
 
     Tests that hit query_database pass a tmp directory: the demo database is

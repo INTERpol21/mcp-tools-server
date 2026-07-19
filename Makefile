@@ -1,24 +1,34 @@
-.PHONY: install install-dev run run-stdio run-http seed test lint
+.PHONY: install install-dev run run-stdio run-http seed test lint typecheck lock
 
+# uv is the source of truth; requirements*.txt are exported from uv.lock for Docker/pip users.
 install:
-	pip install -r requirements.txt
+	uv sync --frozen --no-dev
 
-install-dev: install
-	pip install -r requirements-dev.txt
+install-dev:
+	uv sync --frozen
 
 run: run-http  ## platform default: streamable HTTP on :8082 (endpoint /mcp)
 
 run-stdio:
-	python -m app.server --transport stdio
+	uv run python -m app.server --transport stdio
 
 run-http:
-	python -m app.server --transport http
+	uv run python -m app.server --transport http
 
 seed:
-	python -m app.tools.seed
+	uv run python -m app.tools.seed
 
 test:
-	pytest
+	uv run pytest
 
 lint:
-	ruff check app tests
+	uv run ruff check app tests
+
+typecheck:
+	uv run mypy app
+
+# Regenerate uv.lock and the exported requirements files after editing pyproject.toml.
+lock:
+	uv lock
+	uv export --frozen --no-hashes --no-dev --no-emit-project -o requirements.txt
+	uv export --frozen --no-hashes --only-dev --no-emit-project -o requirements-dev.txt

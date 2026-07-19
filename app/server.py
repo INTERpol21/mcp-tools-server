@@ -45,7 +45,7 @@ _DOC_MIME_TYPES = {
 }
 
 
-def create_server(settings: "Settings | None" = None) -> FastMCP:
+def create_server(settings: Settings | None = None) -> FastMCP:
     """Build a FastMCP server with all four tools and docs:// resources registered.
 
     Accepting ``settings`` keeps the factory injectable: tests point it at a
@@ -142,7 +142,7 @@ def _doc_mime_type(name: str) -> str:
     return _DOC_MIME_TYPES.get(Path(name).suffix.lower(), "text/plain")
 
 
-def _make_doc_reader(name: str, docs_dir: Path) -> "Callable[[], str]":
+def _make_doc_reader(name: str, docs_dir: Path) -> Callable[[], str]:
     """Lazy reader for one docs file (binds ``name`` per loop iteration)."""
 
     def _read() -> str:
@@ -200,7 +200,7 @@ def _run_http(server: FastMCP) -> None:
 server = create_server()
 
 
-def main(argv: "list[str] | None" = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
         prog="python -m app.server",

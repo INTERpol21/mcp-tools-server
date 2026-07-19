@@ -59,10 +59,10 @@ _READ_ONLY_MESSAGE = (
 
 def _authorizer(
     action: int,
-    _arg1: "str | None",
-    _arg2: "str | None",
-    _db_name: "str | None",
-    _trigger: "str | None",
+    _arg1: str | None,
+    _arg2: str | None,
+    _db_name: str | None,
+    _trigger: str | None,
 ) -> int:
     """SQLite authorizer hook: allow read operations, deny everything else."""
     if action in _ALLOWED_ACTIONS:
