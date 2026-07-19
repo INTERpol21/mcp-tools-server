@@ -10,6 +10,7 @@ import pytest
 
 from app.core.errors import ToolError
 from app.tools.database import (
+    HARD_ROW_CAP,
     MAX_CELL_BYTES,
     MAX_SQL_CHARS,
     _connect_read_only,
@@ -204,3 +205,115 @@ def test_concurrent_first_run_seeding_is_race_safe(tmp_path: Path) -> None:
         thread.join()
     assert errors == []
     assert results == [6] * 10
+
+
+# --------------------------------------------------------------------------- #
+# More adversarial hardening, exercised against the rich fixture DB.
+# Each test names the concrete production failure it guards against.
+# --------------------------------------------------------------------------- #
+
+
+def test_null_values_serialise_as_none(db_path: Path) -> None:
+    # Failure: a NULL cell crashing JSON serialisation or being dropped silently.
+    result = query_database("SELECT NULL AS n, 1 AS one", db_path=db_path)
+    assert result["rows"] == [[None, 1]]
+
+
+def test_hard_row_cap_bounds_result_regardless_of_max_rows(db_path: Path) -> None:
+    # Failure: an unbounded result set flooding the model context; max_rows above
+    # HARD_ROW_CAP must not lift the ceiling, even for a generative CTE.
+    ensure_database(db_path)
+    sql = (
+        "WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq "
+        "WHERE n < 5000) SELECT n FROM seq"
+    )
+    result = query_database(sql, max_rows=1_000_000, db_path=db_path)
+    assert result["row_count"] == HARD_ROW_CAP
+    assert result["truncated"] is True
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "PRAGMA table_info(companies)",  # statement-form pragma
+        "SELECT name FROM pragma_table_info('companies')",  # function-form pragma
+        "SELECT load_extension('/tmp/evil.so')",  # code-loading side channel
+    ],
+)
+def test_pragma_and_extension_side_channels_rejected(db_path: Path, sql: str) -> None:
+    # Failure: schema enumeration / arbitrary code loading slipping past the
+    # SELECT-only guard through PRAGMA or load_extension.
+    ensure_database(db_path)
+    with pytest.raises(ToolError, match="read-only"):
+        query_database(sql, db_path=db_path)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT FROM WHERE",  # garbled syntax
+        "SELECT * FROM no_such_table",  # unknown table
+        "SELECT no_such_column FROM companies",  # unknown column
+    ],
+)
+def test_malformed_sql_returns_clean_toolerror_not_crash(db_path: Path, sql: str) -> None:
+    # Failure: a SQL error leaking a raw traceback to the caller instead of one
+    # clean structured line.
+    ensure_database(db_path)
+    with pytest.raises(ToolError) as excinfo:
+        query_database(sql, db_path=db_path)
+    message = str(excinfo.value)
+    assert message.startswith("SQL error:")
+    assert "Traceback" not in message
+
+
+def test_unicode_and_emoji_table_data_round_trips(rich_db_path: Path) -> None:
+    # Failure: mojibake / encoding loss on Cyrillic, CJK and emoji stored in the DB.
+    result = query_database(
+        "SELECT name, city FROM companies WHERE id IN (2, 3, 5) ORDER BY id",
+        db_path=rich_db_path,
+    )
+    assert result["rows"] == [
+        ["Ёлка Софт", "Санкт-Петербург"],
+        ["日本テック", "東京"],
+        ["Rocket 🚀 Labs", "Baikonur"],
+    ]
+
+
+def test_large_integer_salary_preserved(rich_db_path: Path) -> None:
+    # Failure: a large integer being truncated or coerced to float in transit.
+    result = query_database(
+        "SELECT salary_rub FROM vacancies WHERE id = 21", db_path=rich_db_path
+    )
+    assert result["rows"] == [[9_999_999]]
+
+
+def test_semicolon_inside_stored_data_is_not_a_statement_boundary(rich_db_path: Path) -> None:
+    # Failure: a ';' inside stored/column data being mistaken for a statement
+    # separator and rejected as multi-statement.
+    result = query_database(
+        "SELECT stack FROM vacancies WHERE stack LIKE '%;%'", db_path=rich_db_path
+    )
+    assert result["rows"] == [["Go, eBPF, Rust; ATT&CK"]]
+
+
+def test_pagination_is_deterministic(rich_db_path: Path) -> None:
+    # Failure: unstable ordering across LIMIT/OFFSET pages causing rows to be
+    # skipped or duplicated when a client paginates.
+    page_sql = "SELECT id FROM vacancies ORDER BY id LIMIT 5 OFFSET {offset}"
+    seen: list[int] = []
+    for offset in (0, 5, 10, 15, 20):
+        page = query_database(page_sql.format(offset=offset), db_path=rich_db_path)
+        seen.extend(row[0] for row in page["rows"])
+    assert seen == list(range(1, 22))  # 21 vacancies, no gaps, no repeats
+
+
+@pytest.mark.parametrize("max_rows", [0, -5])
+def test_nonpositive_max_rows_clamped_to_at_least_one(db_path: Path, max_rows: int) -> None:
+    # Failure: max_rows<=0 yielding an empty or error result instead of one row.
+    ensure_database(db_path)
+    result = query_database(
+        "SELECT id FROM companies ORDER BY id", max_rows=max_rows, db_path=db_path
+    )
+    assert result["row_count"] == 1
+    assert result["truncated"] is True
