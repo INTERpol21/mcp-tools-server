@@ -16,7 +16,7 @@ from typing import Any
 
 from typing_extensions import TypedDict
 
-from app.tools.errors import ToolError
+from app.core.errors import ToolError
 
 MAX_RESULTS_CAP = 20
 MAX_QUERY_CHARS = 2_000

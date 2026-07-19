@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
+from app.core.errors import ToolError
 from app.tools.database import (
     MAX_CELL_BYTES,
     MAX_SQL_CHARS,
     _connect_read_only,
     query_database,
 )
-from app.tools.errors import ToolError
 from app.tools.seed import ensure_database
 
 

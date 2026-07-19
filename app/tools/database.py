@@ -18,7 +18,7 @@ from typing import Any
 
 from typing_extensions import TypedDict
 
-from app.tools.errors import ToolError
+from app.core.errors import ToolError
 from app.tools.seed import ensure_database
 
 DEFAULT_MAX_ROWS = 50

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.tools.errors import ToolError
+from app.core.errors import ToolError
 from app.tools.files import MAX_FILE_BYTES, list_dir, read_file
 
 

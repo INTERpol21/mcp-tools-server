@@ -12,7 +12,7 @@ from pathlib import Path
 
 from typing_extensions import NotRequired, TypedDict
 
-from app.tools.errors import ToolError
+from app.core.errors import ToolError
 
 MAX_FILE_BYTES = 100 * 1024
 

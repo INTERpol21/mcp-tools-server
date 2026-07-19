@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.tools.errors import ToolError
+from app.core.errors import ToolError
 from app.tools.search import MAX_QUERY_CHARS, MAX_RESULTS_CAP, search_web
 
 

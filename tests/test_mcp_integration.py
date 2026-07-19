@@ -15,7 +15,7 @@ import pytest
 from mcp.shared.exceptions import McpError
 from pydantic import AnyUrl
 
-from app.config import Settings
+from app.core.config import Settings
 from app.server import create_server
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
