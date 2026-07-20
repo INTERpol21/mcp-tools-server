@@ -128,7 +128,7 @@ def ensure_database(db_path: Path) -> bool:
 
 def main() -> None:
     """CLI entry point: ``python -m app.tools.seed``."""
-    from app.core.config import load_settings
+    from app.core.settings import load_settings
 
     settings = load_settings()
     created = ensure_database(settings.db_path)

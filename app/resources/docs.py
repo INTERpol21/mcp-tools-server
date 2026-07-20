@@ -17,7 +17,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.resources import FunctionResource
 from pydantic import AnyUrl
 
-from app.core.config import Settings
+from app.core.settings import Settings
 from app.tools import files
 
 # Resource mime types by docs file extension (fallback: plain text).
@@ -41,13 +41,13 @@ def _make_doc_reader(name: str, docs_dir: Path) -> Callable[[], str]:
     return _read
 
 
-def register_doc_resources(server: FastMCP, cfg: Settings) -> int:
+def register_doc_resources(server: FastMCP, settings: Settings) -> int:
     """Publish ``data/docs`` as a ``docs://{name}`` template plus concrete resources.
 
     Returns the number of concrete file resources registered (0 when the docs
     directory is absent; the template still answers direct reads).
     """
-    docs_dir = cfg.docs_dir
+    docs_dir = settings.docs_dir
 
     @server.resource("docs://{name}", name="doc", mime_type="text/plain")
     def get_doc(name: str) -> str:

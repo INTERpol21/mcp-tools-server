@@ -17,7 +17,7 @@ def _default_data_dir() -> Path:
     """Repository-root ``data/`` directory (independent of the CWD).
 
     This is the seeded directory that actually holds ``demo.db``, ``docs/`` and
-    ``search_index.json`` (matching README and ``.env.example``). config.py lives
+    ``search_index.json`` (matching README and ``.env.example``). settings.py lives
     at ``app/core/``, so the repo root is two parents up. The earlier ``app/data``
     default held only a stale ``demo.db``, so a bare ``python -m app.server`` run
     broke ``search_web`` and registered zero ``docs://`` resources.

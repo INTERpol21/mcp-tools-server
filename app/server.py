@@ -21,8 +21,8 @@ import sys
 
 from mcp.server.fastmcp import FastMCP
 
-from app.core.config import Settings, load_settings
 from app.core.logging import configure_logging, get_logger, log_event
+from app.core.settings import Settings, load_settings
 from app.resources.docs import register_doc_resources
 from app.tools import database, files, search
 
@@ -46,12 +46,12 @@ def create_server(settings: Settings | None = None) -> FastMCP:
     temporary data directory without touching process environment.
     """
     configure_logging()
-    cfg = settings or load_settings()
+    settings = settings or load_settings()
     server = FastMCP(
         SERVER_NAME,
         instructions=_INSTRUCTIONS,
-        host=cfg.host,
-        port=cfg.port,
+        host=settings.host,
+        port=settings.port,
     )
 
     @server.tool()
@@ -72,7 +72,7 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             "total_matches", "source": "offline_index"} -- best match first.
         """
         log_event(log, "search_web called", query_len=len(query), max_results=max_results)
-        return search.search_web(query, max_results, index_path=cfg.index_path)
+        return search.search_web(query, max_results, index_path=settings.index_path)
 
     @server.tool()
     def query_database(sql: str, max_rows: int = 50) -> database.QueryDatabaseResult:
@@ -97,7 +97,7 @@ def create_server(settings: Settings | None = None) -> FastMCP:
         """
         # Log the shape, never the SQL text or rows (could carry sensitive data).
         log_event(log, "query_database called", sql_chars=len(sql), max_rows=max_rows)
-        return database.query_database(sql, max_rows, db_path=cfg.db_path)
+        return database.query_database(sql, max_rows, db_path=settings.db_path)
 
     @server.tool()
     def read_file(path: str) -> files.ReadFileResult:
@@ -116,7 +116,7 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             {"path", "size_bytes", "content"}.
         """
         log_event(log, "read_file called", path=path)
-        return files.read_file(path, data_dir=cfg.data_dir)
+        return files.read_file(path, data_dir=settings.data_dir)
 
     @server.tool()
     def list_dir(path: str = ".") -> files.ListDirResult:
@@ -132,13 +132,13 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             {"path", "entries": [{"name", "type", "size_bytes"?}, ...], "count"}.
         """
         log_event(log, "list_dir called", path=path)
-        return files.list_dir(path, data_dir=cfg.data_dir)
+        return files.list_dir(path, data_dir=settings.data_dir)
 
-    resource_count = register_doc_resources(server, cfg)
+    resource_count = register_doc_resources(server, settings)
     log_event(
         log,
         "MCP server built",
-        data_dir=str(cfg.data_dir),
+        data_dir=str(settings.data_dir),
         tools=4,
         doc_resources=resource_count,
     )

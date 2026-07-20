@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.core.config import _default_data_dir
+from app.core.settings import _default_data_dir
 
 
 def test_default_data_dir_is_the_seeded_repo_directory():
