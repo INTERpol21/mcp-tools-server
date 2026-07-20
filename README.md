@@ -8,8 +8,8 @@ MCP server on the official Python SDK (FastMCP): four tools, stdio and streamabl
 
 - MCP servers with the official SDK: tools, resources, schemas, lifecycle, both transports.
 - Tool design for LLMs: names, argument schemas and docstrings are the interface the model reasons over, so descriptions carry the DB schema, examples and constraints on purpose.
-- SQL locked to read-only via a SQLite authorizer rather than regex filtering, plus multi-statement injection rejection.
-- A filesystem sandbox built on `resolve()` + `is_relative_to`, with size caps and binary detection.
+- Least-privilege security controls: SQL locked to read-only via a SQLite authorizer rather than regex filtering (plus multi-statement injection rejection), and a filesystem sandbox built on `resolve()` + `is_relative_to`, with size caps and binary detection.
+- Structured JSON logging to stderr: every tool call, rejection and startup is one machine-parseable line, shapes and sizes only — never SQL text, rows or file contents.
 - Layering: tool logic is pure typed functions in `app/tools/` with zero MCP imports; `app/server.py` registers thin wrappers.
 
 ## Architecture
@@ -76,13 +76,15 @@ Read from the process environment, no dotenv (see `.env.example`): `DATA_DIR` �
 ## Notes
 
 - `search_web` is an offline stub: keyword ranking over 14 curated entries, so demos and tests are deterministic. A real search API drops in behind the same contract.
-- `query_database` layers: read-only URI (`mode=ro`), a `sqlite3` authorizer that allowlists SELECT/READ/FUNCTION, and `complete_statement` rejection of `SELECT 1; DROP ...` payloads.
+- `query_database` layers, least-privilege: read-only URI (`mode=ro`), a `sqlite3` authorizer that allowlists SELECT/READ/FUNCTION and denies writes, DDL, PRAGMA, ATTACH and transactions, `complete_statement` rejection of `SELECT 1; DROP ...` payloads, and row/cell/result-size caps.
+- `read_file` / `list_dir` are sandboxed to `DATA_DIR`: absolute paths are accepted only when they resolve inside the root; any escape (`..`, outside path, or symlink target) is denied.
+- Structured JSON logging (`app/core/logging.py`) writes one JSON object per line to **stderr** (stdout carries the stdio JSON-RPC frames), logging only call shapes/sizes/paths — never data.
 - All failures raise `ToolError` with a single-line message — clients see actionable errors, never tracebacks.
 
 ## Testing
 
-68 tests, offline: units hit the pure functions directly; integration runs a real MCP client against the server in memory via the SDK's `create_connected_server_and_client_session` — tools, structured output, resources and error mapping included.
-`make install-dev && make test`; `make lint` for ruff.
+97 tests, offline: units hit the pure functions directly; integration runs a real MCP client against the server in memory via the SDK's `create_connected_server_and_client_session` — tools, structured output, resources and error mapping included.
+`make install-dev && make test`; `make lint` for ruff, `make typecheck` for strict mypy. CI runs lint + strict mypy + tests, a security job (pip-audit + bandit), and CodeQL; Dependabot keeps deps current. The seeded `data/` (demo.db, docs/, search_index.json) is resolved from the repo root by default; set `DATA_DIR` to relocate the sandbox.
 
 ---
 
