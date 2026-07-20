@@ -14,8 +14,15 @@ DEFAULT_PORT = 8082
 
 
 def _default_data_dir() -> Path:
-    """Repository-local ``data/`` directory (independent of the CWD)."""
-    return Path(__file__).resolve().parent.parent / "data"
+    """Repository-root ``data/`` directory (independent of the CWD).
+
+    This is the seeded directory that actually holds ``demo.db``, ``docs/`` and
+    ``search_index.json`` (matching README and ``.env.example``). settings.py lives
+    at ``app/core/``, so the repo root is two parents up. The earlier ``app/data``
+    default held only a stale ``demo.db``, so a bare ``python -m app.server`` run
+    broke ``search_web`` and registered zero ``docs://`` resources.
+    """
+    return Path(__file__).resolve().parents[2] / "data"
 
 
 @dataclass(frozen=True)

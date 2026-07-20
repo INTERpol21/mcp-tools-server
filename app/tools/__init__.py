@@ -6,6 +6,6 @@ The MCP layer in ``app.server`` only adds protocol plumbing, which keeps
 this logic trivially unit-testable and independent of SDK internals.
 """
 
-from app.tools.errors import ToolError
+from app.core.errors import ToolError
 
 __all__ = ["ToolError"]

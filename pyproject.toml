@@ -1,0 +1,42 @@
+[project]
+name = "mcp-tools-server"
+version = "1.0.0"
+description = "MCP server (FastMCP): offline web search, read-only SQL and a sandboxed filesystem, over stdio and streamable HTTP."
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.10,<2",
+    "typing_extensions>=4.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+# Application project, not a distributable package: uv locks deps without building.
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP"]
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+warn_redundant_casts = true
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_return_any = true
+disallow_any_generics = true
+no_implicit_optional = true
+warn_unused_ignores = true

@@ -9,10 +9,11 @@ Error messages echo the caller's path, never absolute host paths.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from typing_extensions import NotRequired, TypedDict
 
-from app.tools.errors import ToolError
+from app.core.errors import ToolError
 
 MAX_FILE_BYTES = 100 * 1024
 
@@ -29,7 +30,7 @@ class DirEntry(TypedDict):
     """One ``list_dir`` entry; ``size_bytes`` is present for files only."""
 
     name: str
-    type: str
+    type: Literal["dir", "file"]
     size_bytes: NotRequired[int]
 
 
@@ -110,9 +111,10 @@ def list_dir(path: str = ".", *, data_dir: Path) -> ListDirResult:
         )
         entries: list[DirEntry] = []
         for child in children:
+            child_type: Literal["dir", "file"] = "dir" if child.is_dir() else "file"
             entry: DirEntry = {
                 "name": child.name,
-                "type": "dir" if child.is_dir() else "file",
+                "type": child_type,
             }
             if child.is_file():
                 entry["size_bytes"] = child.stat().st_size

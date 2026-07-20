@@ -18,17 +18,17 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Callable
-from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.resources import FunctionResource
-from pydantic import AnyUrl
 
-from app.config import Settings, load_settings
+from app.core.logging import configure_logging, get_logger, log_event
+from app.core.settings import Settings, load_settings
+from app.resources.docs import register_doc_resources
 from app.tools import database, files, search
 
 SERVER_NAME = "portfolio-tools"
+
+log = get_logger("mcp.tools")
 
 _INSTRUCTIONS = (
     "Demo toolbox for an AI-platform portfolio. Provides offline web search "
@@ -38,25 +38,20 @@ _INSTRUCTIONS = (
     "deterministic and safe: destructive operations are rejected by design."
 )
 
-# Resource mime types by docs file extension (fallback: plain text).
-_DOC_MIME_TYPES = {
-    ".md": "text/markdown",
-    ".txt": "text/plain",
-}
 
-
-def create_server(settings: "Settings | None" = None) -> FastMCP:
+def create_server(settings: Settings | None = None) -> FastMCP:
     """Build a FastMCP server with all four tools and docs:// resources registered.
 
     Accepting ``settings`` keeps the factory injectable: tests point it at a
     temporary data directory without touching process environment.
     """
-    cfg = settings or load_settings()
+    configure_logging()
+    settings = settings or load_settings()
     server = FastMCP(
         SERVER_NAME,
         instructions=_INSTRUCTIONS,
-        host=cfg.host,
-        port=cfg.port,
+        host=settings.host,
+        port=settings.port,
     )
 
     @server.tool()
@@ -76,7 +71,8 @@ def create_server(settings: "Settings | None" = None) -> FastMCP:
             {"query", "results": [{"title", "url", "snippet", "score"}, ...],
             "total_matches", "source": "offline_index"} -- best match first.
         """
-        return search.search_web(query, max_results, index_path=cfg.index_path)
+        log_event(log, "search_web called", query_len=len(query), max_results=max_results)
+        return search.search_web(query, max_results, index_path=settings.index_path)
 
     @server.tool()
     def query_database(sql: str, max_rows: int = 50) -> database.QueryDatabaseResult:
@@ -99,24 +95,28 @@ def create_server(settings: "Settings | None" = None) -> FastMCP:
         Returns:
             {"columns", "rows", "row_count", "truncated"}.
         """
-        return database.query_database(sql, max_rows, db_path=cfg.db_path)
+        # Log the shape, never the SQL text or rows (could carry sensitive data).
+        log_event(log, "query_database called", sql_chars=len(sql), max_rows=max_rows)
+        return database.query_database(sql, max_rows, db_path=settings.db_path)
 
     @server.tool()
     def read_file(path: str) -> files.ReadFileResult:
         """Read a UTF-8 text file from the server's sandboxed data directory.
 
-        Paths are relative to the data directory; escaping it (via "..",
-        absolute paths or symlinks) is denied. Files are capped at 100 KB
-        and must be text. Use list_dir first to discover available files,
+        Relative and absolute paths are both accepted, but only if they resolve
+        inside the data directory; any path that escapes it (via "..", a location
+        outside the root, or a symlink target) is denied. Files are capped at
+        100 KB and must be text. Use list_dir first to discover available files,
         e.g. read_file("docs/pipeline.md").
 
         Args:
-            path: File path relative to the data directory.
+            path: File path, relative to the data directory or absolute-inside-it.
 
         Returns:
             {"path", "size_bytes", "content"}.
         """
-        return files.read_file(path, data_dir=cfg.data_dir)
+        log_event(log, "read_file called", path=path)
+        return files.read_file(path, data_dir=settings.data_dir)
 
     @server.tool()
     def list_dir(path: str = ".") -> files.ListDirResult:
@@ -131,55 +131,18 @@ def create_server(settings: "Settings | None" = None) -> FastMCP:
         Returns:
             {"path", "entries": [{"name", "type", "size_bytes"?}, ...], "count"}.
         """
-        return files.list_dir(path, data_dir=cfg.data_dir)
+        log_event(log, "list_dir called", path=path)
+        return files.list_dir(path, data_dir=settings.data_dir)
 
-    _register_doc_resources(server, cfg)
+    resource_count = register_doc_resources(server, settings)
+    log_event(
+        log,
+        "MCP server built",
+        data_dir=str(settings.data_dir),
+        tools=4,
+        doc_resources=resource_count,
+    )
     return server
-
-
-def _doc_mime_type(name: str) -> str:
-    """Mime type for a docs file, by extension."""
-    return _DOC_MIME_TYPES.get(Path(name).suffix.lower(), "text/plain")
-
-
-def _make_doc_reader(name: str, docs_dir: Path) -> "Callable[[], str]":
-    """Lazy reader for one docs file (binds ``name`` per loop iteration)."""
-
-    def _read() -> str:
-        return files.read_file(name, data_dir=docs_dir)["content"]
-
-    return _read
-
-
-def _register_doc_resources(server: FastMCP, cfg: Settings) -> None:
-    """Publish ``data/docs`` as a ``docs://{name}`` template plus concrete resources.
-
-    Every read goes through ``files.read_file`` with the docs directory as the
-    sandbox root, so resources are exactly as hardened as the read_file tool:
-    escapes ("..", absolute paths, symlinks), oversized files and binary
-    content are all rejected with the same clean errors.
-    """
-    docs_dir = cfg.docs_dir
-
-    @server.resource("docs://{name}", name="doc", mime_type="text/plain")
-    def get_doc(name: str) -> str:
-        """Text of one file from the server's data/docs directory, by file name."""
-        return files.read_file(name, data_dir=docs_dir)["content"]
-
-    if not docs_dir.is_dir():
-        return  # nothing to list; the template still answers direct reads
-    for child in sorted(docs_dir.iterdir(), key=lambda entry: entry.name.lower()):
-        if not child.is_file() or child.name.startswith("."):
-            continue
-        server.add_resource(
-            FunctionResource(
-                uri=AnyUrl(f"docs://{child.name}"),
-                name=child.name,
-                description=f"Demo document served from data/docs/{child.name}.",
-                mime_type=_doc_mime_type(child.name),
-                fn=_make_doc_reader(child.name, docs_dir),
-            )
-        )
 
 
 def _run_http(server: FastMCP) -> None:
@@ -200,7 +163,7 @@ def _run_http(server: FastMCP) -> None:
 server = create_server()
 
 
-def main(argv: "list[str] | None" = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
         prog="python -m app.server",

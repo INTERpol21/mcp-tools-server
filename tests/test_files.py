@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.tools.errors import ToolError
+from app.core.errors import ToolError
 from app.tools.files import MAX_FILE_BYTES, list_dir, read_file
 
 
@@ -133,3 +133,68 @@ def test_list_dir_deep_nonexistent_is_clean_error(sandbox: Path) -> None:
 def test_list_dir_dotdot_escape_blocked(sandbox: Path) -> None:
     with pytest.raises(ToolError, match="sandbox"):
         list_dir("docs/../..", data_dir=sandbox)
+
+
+# --------------------------------------------------------------------------- #
+# More sandbox-escape hardening. Each test names the concrete failure it guards.
+# --------------------------------------------------------------------------- #
+
+
+def test_absolute_path_inside_sandbox_is_allowed(sandbox: Path) -> None:
+    # Contract: an absolute path is fine *iff* it resolves inside the sandbox; it
+    # is the escape that is denied, not the leading '/'. Guards against a naive
+    # "reject all absolute paths" rule that would break legitimate reads.
+    absolute = str((sandbox / "docs" / "notes.md").resolve())
+    result = read_file(absolute, data_dir=sandbox)
+    assert result["path"] == "docs/notes.md"
+
+
+def test_absolute_path_outside_sandbox_denied(sandbox: Path) -> None:
+    # Failure: an absolute path pointing outside the sandbox reading host files.
+    outside = sandbox.parent / "secret.txt"  # written by the sandbox fixture
+    with pytest.raises(ToolError, match="sandbox"):
+        read_file(str(outside), data_dir=sandbox)
+
+
+def test_symlinked_directory_escape_blocked_for_read(sandbox: Path) -> None:
+    # Failure: reading through a symlinked *directory* whose target is outside the
+    # sandbox (an escape the per-file symlink check alone might miss).
+    outside_dir = sandbox.parent / "outside"
+    outside_dir.mkdir()
+    (outside_dir / "loot.txt").write_text("host secret\n", encoding="utf-8")
+    try:
+        (sandbox / "linkdir").symlink_to(outside_dir, target_is_directory=True)
+    except OSError:
+        pytest.skip("platform does not allow creating symlinks")
+    with pytest.raises(ToolError, match="sandbox") as excinfo:
+        read_file("linkdir/loot.txt", data_dir=sandbox)
+    assert str(sandbox.parent) not in str(excinfo.value)  # no host-path leak
+
+
+def test_symlinked_directory_escape_blocked_for_list(sandbox: Path) -> None:
+    # Failure: enumerating a directory that symlinks outside the sandbox.
+    outside_dir = sandbox.parent / "outside2"
+    outside_dir.mkdir()
+    try:
+        (sandbox / "linkdir2").symlink_to(outside_dir, target_is_directory=True)
+    except OSError:
+        pytest.skip("platform does not allow creating symlinks")
+    with pytest.raises(ToolError, match="sandbox"):
+        list_dir("linkdir2", data_dir=sandbox)
+
+
+def test_list_dir_reports_file_sizes_and_dirs_first(sandbox: Path) -> None:
+    # Failure: size_bytes missing on files or directories not sorted first, which
+    # the MCP structured-output schema and clients rely on.
+    result = list_dir("docs", data_dir=sandbox)
+    by_name = {entry["name"]: entry for entry in result["entries"]}
+    assert by_name["notes.md"]["type"] == "file"
+    assert by_name["notes.md"]["size_bytes"] > 0
+
+
+def test_read_file_empty_file_is_ok(sandbox: Path) -> None:
+    # Failure: a legitimately empty file being treated as an error.
+    (sandbox / "empty.txt").write_text("", encoding="utf-8")
+    result = read_file("empty.txt", data_dir=sandbox)
+    assert result["content"] == ""
+    assert result["size_bytes"] == 0

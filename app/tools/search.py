@@ -12,14 +12,26 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
 
 from typing_extensions import TypedDict
 
-from app.tools.errors import ToolError
+from app.core.errors import ToolError
 
 MAX_RESULTS_CAP = 20
 MAX_QUERY_CHARS = 2_000
+
+
+class IndexEntry(TypedDict, total=False):
+    """One raw entry in the curated offline index (``data/search_index.json``).
+
+    Every field is optional: ranking reads them through ``dict.get`` with
+    defaults, so a partially-filled entry ranks low instead of crashing.
+    """
+
+    title: str
+    url: str
+    snippet: str
+    keywords: list[str]
 
 
 class SearchHit(TypedDict):
@@ -50,7 +62,7 @@ def _tokenize(text: str) -> set[str]:
     return set(_TOKEN_RE.findall(text.lower()))
 
 
-def _load_index(index_path: Path) -> list[dict[str, Any]]:
+def _load_index(index_path: Path) -> list[IndexEntry]:
     """Load and minimally validate the JSON search index."""
     if not index_path.is_file():
         raise ToolError(
@@ -66,7 +78,7 @@ def _load_index(index_path: Path) -> list[dict[str, Any]]:
     return entries
 
 
-def _score(query_tokens: set[str], entry: dict[str, Any]) -> int:
+def _score(query_tokens: set[str], entry: IndexEntry) -> int:
     """Keyword-overlap score: keywords weigh more than title words."""
     keyword_tokens = _tokenize(" ".join(entry.get("keywords", [])))
     title_tokens = _tokenize(entry.get("title", ""))
@@ -94,7 +106,7 @@ def search_web(
         raise ToolError("Query contains no searchable terms.")
     limit = max(1, min(int(max_results), MAX_RESULTS_CAP))
 
-    scored: list[tuple[int, int, dict[str, Any]]] = []
+    scored: list[tuple[int, int, IndexEntry]] = []
     for position, entry in enumerate(_load_index(index_path)):
         score = _score(query_tokens, entry)
         if score > 0:
