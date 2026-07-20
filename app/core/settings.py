@@ -9,7 +9,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_HOST = "0.0.0.0"
+# Bind all interfaces: intended for the containerized service (Docker/compose).
+DEFAULT_HOST = "0.0.0.0"  # nosec B104
 DEFAULT_PORT = 8082
 
 
