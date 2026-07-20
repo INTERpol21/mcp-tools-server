@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import TypeAlias
 
 from typing_extensions import TypedDict
 
@@ -24,12 +24,18 @@ from app.tools.seed import ensure_database
 DEFAULT_MAX_ROWS = 50
 HARD_ROW_CAP = 200
 
+# A single JSON-serialisable SQLite cell. SQLite's default types are
+# str/int/float/bytes/NULL; ``_to_json_value`` turns every blob into a short
+# "<blob: N bytes>" summary string, so once normalised each cell is exactly one
+# of these scalars. This is the honest element type of a result row -- not Any.
+JsonScalar: TypeAlias = "str | int | float | None"
+
 
 class QueryDatabaseResult(TypedDict):
     """Shape of a successful ``query_database`` call (drives MCP structured output)."""
 
     columns: list[str]
-    rows: list[list[Any]]
+    rows: list[list[JsonScalar]]
     row_count: int
     truncated: bool
 
@@ -87,11 +93,16 @@ def _connect_read_only(db_path: Path) -> sqlite3.Connection:
     return sqlite3.connect(uri, uri=True)
 
 
-def _to_json_value(value: object) -> object:
+def _to_json_value(value: object) -> JsonScalar:
     """Make a SQLite cell value JSON-serialisable."""
     if isinstance(value, (bytes, bytearray)):
         return f"<blob: {len(value)} bytes>"
-    return value
+    if value is None or isinstance(value, (str, int, float)):
+        return value
+    # SQLite only yields str/int/float/bytes/NULL by default; coerce anything
+    # exotic (a custom text_factory/converter) to text rather than smuggle an
+    # untyped value into the typed result.
+    return str(value)
 
 
 def _value_bytes(value: object) -> int:
@@ -134,7 +145,7 @@ def query_database(
             columns = [description[0] for description in cursor.description]
             # Stream row-by-row so an oversized cell is caught after a single
             # fetch, before it can be amplified across many rows.
-            rows: list[list[Any]] = []
+            rows: list[list[JsonScalar]] = []
             truncated = False
             total_bytes = 0
             while True:
@@ -144,7 +155,7 @@ def query_database(
                 if len(rows) >= limit:
                     truncated = True
                     break
-                json_row: list[Any] = []
+                json_row: list[JsonScalar] = []
                 for value in raw_row:
                     if isinstance(value, (bytes, bytearray, str)) and len(value) > MAX_CELL_BYTES:
                         raise ToolError(

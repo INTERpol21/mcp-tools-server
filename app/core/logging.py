@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
 
 _CONFIGURED = False
 
@@ -20,7 +19,7 @@ class JsonFormatter(logging.Formatter):
     """One JSON object per log line."""
 
     def format(self, record: logging.LogRecord) -> str:
-        payload: dict[str, Any] = {
+        payload: dict[str, object] = {
             "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
             "level": record.levelname,
             "logger": record.name,
@@ -58,6 +57,6 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
-def log_event(logger: logging.Logger, msg: str, **context: Any) -> None:
+def log_event(logger: logging.Logger, msg: str, **context: object) -> None:
     """Emit an info record with structured, non-sensitive context fields."""
     logger.info(msg, extra={"context": context})
