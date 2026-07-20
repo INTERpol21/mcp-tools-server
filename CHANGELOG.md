@@ -6,7 +6,7 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-07-20
+## [1.0.0] - 2026-07-21
 
 First tagged release. An MCP server on the official Python SDK (FastMCP),
 exposing tools and resources over both stdio and streamable HTTP from one
@@ -30,4 +30,4 @@ codebase.
 - The streamable-HTTP transport is unauthenticated — deliberate for the offline
   demo, tracked in the roadmap.
 
-[0.1.0]: https://github.com/INTERpol21/mcp-tools-server/releases/tag/v0.1.0
+[1.0.0]: https://github.com/INTERpol21/mcp-tools-server/releases/tag/v1.0.0
