@@ -1,9 +1,11 @@
 """Publish the files under ``data/docs`` as ``docs://`` MCP resources.
 
 Every read goes through ``files.read_file`` with the docs directory as the
-sandbox root, so resources are exactly as hardened as the read_file tool:
-escapes ("..", absolute paths, symlinks), oversized files and binary content
-are all rejected with the same clean errors.
+sandbox root, so resources are exactly as hardened as the read_file tool: any
+path that resolves outside the root (via "..", a location outside it, or a
+symlink target), oversized files and binary content are all rejected with the
+same clean errors. Absolute paths are allowed only when they resolve inside
+the root.
 """
 
 from __future__ import annotations
@@ -39,8 +41,12 @@ def _make_doc_reader(name: str, docs_dir: Path) -> Callable[[], str]:
     return _read
 
 
-def register_doc_resources(server: FastMCP, cfg: Settings) -> None:
-    """Publish ``data/docs`` as a ``docs://{name}`` template plus concrete resources."""
+def register_doc_resources(server: FastMCP, cfg: Settings) -> int:
+    """Publish ``data/docs`` as a ``docs://{name}`` template plus concrete resources.
+
+    Returns the number of concrete file resources registered (0 when the docs
+    directory is absent; the template still answers direct reads).
+    """
     docs_dir = cfg.docs_dir
 
     @server.resource("docs://{name}", name="doc", mime_type="text/plain")
@@ -49,7 +55,8 @@ def register_doc_resources(server: FastMCP, cfg: Settings) -> None:
         return files.read_file(name, data_dir=docs_dir)["content"]
 
     if not docs_dir.is_dir():
-        return  # nothing to list; the template still answers direct reads
+        return 0  # nothing to list; the template still answers direct reads
+    count = 0
     for child in sorted(docs_dir.iterdir(), key=lambda entry: entry.name.lower()):
         if not child.is_file() or child.name.startswith("."):
             continue
@@ -62,3 +69,5 @@ def register_doc_resources(server: FastMCP, cfg: Settings) -> None:
                 fn=_make_doc_reader(child.name, docs_dir),
             )
         )
+        count += 1
+    return count

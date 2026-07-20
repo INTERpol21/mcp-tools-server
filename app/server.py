@@ -22,10 +22,13 @@ import sys
 from mcp.server.fastmcp import FastMCP
 
 from app.core.config import Settings, load_settings
+from app.core.logging import configure_logging, get_logger, log_event
 from app.resources.docs import register_doc_resources
 from app.tools import database, files, search
 
 SERVER_NAME = "portfolio-tools"
+
+log = get_logger("mcp.tools")
 
 _INSTRUCTIONS = (
     "Demo toolbox for an AI-platform portfolio. Provides offline web search "
@@ -42,6 +45,7 @@ def create_server(settings: Settings | None = None) -> FastMCP:
     Accepting ``settings`` keeps the factory injectable: tests point it at a
     temporary data directory without touching process environment.
     """
+    configure_logging()
     cfg = settings or load_settings()
     server = FastMCP(
         SERVER_NAME,
@@ -67,6 +71,7 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             {"query", "results": [{"title", "url", "snippet", "score"}, ...],
             "total_matches", "source": "offline_index"} -- best match first.
         """
+        log_event(log, "search_web called", query_len=len(query), max_results=max_results)
         return search.search_web(query, max_results, index_path=cfg.index_path)
 
     @server.tool()
@@ -90,23 +95,27 @@ def create_server(settings: Settings | None = None) -> FastMCP:
         Returns:
             {"columns", "rows", "row_count", "truncated"}.
         """
+        # Log the shape, never the SQL text or rows (could carry sensitive data).
+        log_event(log, "query_database called", sql_chars=len(sql), max_rows=max_rows)
         return database.query_database(sql, max_rows, db_path=cfg.db_path)
 
     @server.tool()
     def read_file(path: str) -> files.ReadFileResult:
         """Read a UTF-8 text file from the server's sandboxed data directory.
 
-        Paths are relative to the data directory; escaping it (via "..",
-        absolute paths or symlinks) is denied. Files are capped at 100 KB
-        and must be text. Use list_dir first to discover available files,
+        Relative and absolute paths are both accepted, but only if they resolve
+        inside the data directory; any path that escapes it (via "..", a location
+        outside the root, or a symlink target) is denied. Files are capped at
+        100 KB and must be text. Use list_dir first to discover available files,
         e.g. read_file("docs/pipeline.md").
 
         Args:
-            path: File path relative to the data directory.
+            path: File path, relative to the data directory or absolute-inside-it.
 
         Returns:
             {"path", "size_bytes", "content"}.
         """
+        log_event(log, "read_file called", path=path)
         return files.read_file(path, data_dir=cfg.data_dir)
 
     @server.tool()
@@ -122,9 +131,17 @@ def create_server(settings: Settings | None = None) -> FastMCP:
         Returns:
             {"path", "entries": [{"name", "type", "size_bytes"?}, ...], "count"}.
         """
+        log_event(log, "list_dir called", path=path)
         return files.list_dir(path, data_dir=cfg.data_dir)
 
-    register_doc_resources(server, cfg)
+    resource_count = register_doc_resources(server, cfg)
+    log_event(
+        log,
+        "MCP server built",
+        data_dir=str(cfg.data_dir),
+        tools=4,
+        doc_resources=resource_count,
+    )
     return server
 
 
