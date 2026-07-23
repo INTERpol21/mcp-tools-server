@@ -18,7 +18,7 @@ certifi==2026.6.17
     #   httpx
 cffi==2.1.0 ; platform_python_implementation != 'PyPy'
     # via cryptography
-click==8.4.2 ; sys_platform != 'emscripten'
+click==8.4.2
     # via uvicorn
 colorama==0.4.6 ; sys_platform == 'win32'
     # via click
@@ -101,5 +101,7 @@ typing-inspection==0.4.2
     #   mcp
     #   pydantic
     #   pydantic-settings
-uvicorn==0.51.0 ; sys_platform != 'emscripten'
-    # via mcp
+uvicorn==0.51.0
+    # via
+    #   mcp
+    #   mcp-tools-server

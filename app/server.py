@@ -21,8 +21,10 @@ import logging
 from collections.abc import Callable
 from typing import TypeVar
 
+import uvicorn
 from mcp.server.fastmcp import FastMCP
 
+from app.core.auth import BearerAuthMiddleware
 from app.core.errors import ToolError
 from app.core.logging import configure_logging, get_logger, log_event
 from app.core.settings import Settings, load_settings
@@ -177,20 +179,29 @@ def create_server(settings: Settings | None = None) -> FastMCP:
     return server
 
 
-def _run_http(server: FastMCP) -> None:
-    """Run over streamable HTTP.
+def build_http_app(server: FastMCP, settings: Settings) -> BearerAuthMiddleware:
+    """Streamable-HTTP ASGI app behind the bearer gate.
 
-    No SSE fallback: pyproject pins mcp>=1.10, where streamable-http always
-    exists, so the old ``except ValueError`` branch was unreachable — and worse,
-    it would have silently downgraded the transport on any unrelated
-    ValueError instead of surfacing it.
+    A separate factory (rather than inlining in ``_run_http``) so tests can
+    drive the exact app uvicorn serves, middleware included.
     """
-    server.run(transport="streamable-http")
+    return BearerAuthMiddleware(server.streamable_http_app(), settings.api_keys)
+
+
+def _run_http(server: FastMCP, settings: Settings) -> None:
+    """Run over streamable HTTP, gated by bearer auth (stdio stays open).
+
+    Runs uvicorn directly instead of ``server.run(transport="streamable-http")``
+    because FastMCP offers no hook to wrap its ASGI app in middleware. No SSE
+    fallback: pyproject pins mcp>=1.10, where streamable-http always exists.
+    """
+    uvicorn.run(build_http_app(server, settings), host=settings.host, port=settings.port)
 
 
 # Module-level instance so `mcp dev app/server.py` (MCP Inspector) finds it;
 # constructing it only lists data/docs to register resources (no file reads).
-server = create_server()
+_SETTINGS = load_settings()
+server = create_server(_SETTINGS)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -204,11 +215,12 @@ def main(argv: list[str] | None = None) -> None:
         choices=("stdio", "http"),
         default="stdio",
         help="stdio for local clients (default); http serves streamable HTTP "
-        "on MCP_HOST:MCP_PORT (default 0.0.0.0:8082)",
+        "on MCP_HOST:MCP_PORT (default 0.0.0.0:8082), gated by bearer keys "
+        "from MCP_API_KEYS (default demo-key)",
     )
     args = parser.parse_args(argv)
     if args.transport == "http":
-        _run_http(server)
+        _run_http(server, _SETTINGS)
     else:
         server.run(transport="stdio")
 
