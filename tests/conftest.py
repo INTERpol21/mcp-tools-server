@@ -4,7 +4,7 @@ The ``rich_db_path`` fixture below builds a larger, deliberately messy demo
 database (unicode, emoji, salary/edge values, every grade and status) in an
 isolated ``tmp_path`` file. It reuses the production schema from
 ``app.tools.seed`` verbatim, so the fixture can never drift from the real
-schema, yet the checked-in ``data/demo.db`` is never touched and the existing
+schema, yet the generated (gitignored) ``data/demo.db`` is never touched and the existing
 6-company ``db_path`` tests keep passing.
 """
 

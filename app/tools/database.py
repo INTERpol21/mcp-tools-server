@@ -132,8 +132,17 @@ def query_database(
         )
     limit = max(1, min(int(max_rows), HARD_ROW_CAP))
 
-    ensure_database(db_path)
-    connection = _connect_read_only(db_path)
+    # Seeding and connecting touch the filesystem: their raw OSError /
+    # sqlite3.OperationalError messages embed the absolute server-side path
+    # (mkdir failures, "unable to open database file" with the resolved URI).
+    # The tool contract is one clean ToolError line, never internals.
+    try:
+        ensure_database(db_path)
+        connection = _connect_read_only(db_path)
+    except (OSError, sqlite3.Error) as exc:
+        raise ToolError(
+            "Demo database is unavailable; try again or contact the operator."
+        ) from exc
     try:
         connection.set_authorizer(_authorizer)
         try:

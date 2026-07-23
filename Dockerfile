@@ -21,8 +21,10 @@ USER appuser
 
 EXPOSE 8082
 
-# Streamable-HTTP transport: check the port is accepting connections.
+# Streamable-HTTP transport: check the port is accepting connections. Reads
+# MCP_PORT so overriding the documented env var does not leave the container
+# permanently unhealthy against a hardcoded 8082.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import socket, sys; s=socket.socket(); s.settimeout(2); sys.exit(0 if s.connect_ex(('127.0.0.1', 8082))==0 else 1)"
+    CMD python -c "import os, socket, sys; s=socket.socket(); s.settimeout(2); sys.exit(0 if s.connect_ex(('127.0.0.1', int(os.environ.get('MCP_PORT', '8082'))))==0 else 1)"
 
 CMD ["python", "-m", "app.server", "--transport", "http"]

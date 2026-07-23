@@ -17,14 +17,19 @@ Run:
 from __future__ import annotations
 
 import argparse
-import sys
+import logging
+from collections.abc import Callable
+from typing import TypeVar
 
 from mcp.server.fastmcp import FastMCP
 
+from app.core.errors import ToolError
 from app.core.logging import configure_logging, get_logger, log_event
 from app.core.settings import Settings, load_settings
 from app.resources.docs import register_doc_resources
 from app.tools import database, files, search
+
+_T = TypeVar("_T")
 
 SERVER_NAME = "portfolio-tools"
 
@@ -37,6 +42,21 @@ _INSTRUCTIONS = (
     "Project docs are also exposed as docs:// resources. All tools are "
     "deterministic and safe: destructive operations are rejected by design."
 )
+
+
+def _logged_call(logger: logging.Logger, tool: str, call: Callable[[], _T]) -> _T:
+    """Run a tool body, logging rejections before they propagate.
+
+    The README promises "every tool call, rejection and startup" in the logs;
+    calls and startup were logged but ToolError rejections flew past silently.
+    The logged reason is exactly the one-line message already returned to the
+    client, so this leaks nothing new.
+    """
+    try:
+        return call()
+    except ToolError as exc:
+        log_event(logger, "tool call rejected", tool=tool, reason=str(exc))
+        raise
 
 
 def create_server(settings: Settings | None = None) -> FastMCP:
@@ -72,7 +92,11 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             "total_matches", "source": "offline_index"} -- best match first.
         """
         log_event(log, "search_web called", query_len=len(query), max_results=max_results)
-        return search.search_web(query, max_results, index_path=settings.index_path)
+        return _logged_call(
+            log,
+            "search_web",
+            lambda: search.search_web(query, max_results, index_path=settings.index_path),
+        )
 
     @server.tool()
     def query_database(sql: str, max_rows: int = 50) -> database.QueryDatabaseResult:
@@ -97,7 +121,11 @@ def create_server(settings: Settings | None = None) -> FastMCP:
         """
         # Log the shape, never the SQL text or rows (could carry sensitive data).
         log_event(log, "query_database called", sql_chars=len(sql), max_rows=max_rows)
-        return database.query_database(sql, max_rows, db_path=settings.db_path)
+        return _logged_call(
+            log,
+            "query_database",
+            lambda: database.query_database(sql, max_rows, db_path=settings.db_path),
+        )
 
     @server.tool()
     def read_file(path: str) -> files.ReadFileResult:
@@ -116,7 +144,9 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             {"path", "size_bytes", "content"}.
         """
         log_event(log, "read_file called", path=path)
-        return files.read_file(path, data_dir=settings.data_dir)
+        return _logged_call(
+            log, "read_file", lambda: files.read_file(path, data_dir=settings.data_dir)
+        )
 
     @server.tool()
     def list_dir(path: str = ".") -> files.ListDirResult:
@@ -132,7 +162,9 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             {"path", "entries": [{"name", "type", "size_bytes"?}, ...], "count"}.
         """
         log_event(log, "list_dir called", path=path)
-        return files.list_dir(path, data_dir=settings.data_dir)
+        return _logged_call(
+            log, "list_dir", lambda: files.list_dir(path, data_dir=settings.data_dir)
+        )
 
     resource_count = register_doc_resources(server, settings)
     log_event(
@@ -146,16 +178,14 @@ def create_server(settings: Settings | None = None) -> FastMCP:
 
 
 def _run_http(server: FastMCP) -> None:
-    """Run over streamable HTTP, falling back to SSE for older SDKs."""
-    try:
-        server.run(transport="streamable-http")
-    except ValueError:
-        print(
-            "This mcp SDK build does not support 'streamable-http'; "
-            "falling back to the legacy SSE transport.",
-            file=sys.stderr,
-        )
-        server.run(transport="sse")
+    """Run over streamable HTTP.
+
+    No SSE fallback: pyproject pins mcp>=1.10, where streamable-http always
+    exists, so the old ``except ValueError`` branch was unreachable — and worse,
+    it would have silently downgraded the transport on any unrelated
+    ValueError instead of surfacing it.
+    """
+    server.run(transport="streamable-http")
 
 
 # Module-level instance so `mcp dev app/server.py` (MCP Inspector) finds it;

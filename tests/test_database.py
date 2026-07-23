@@ -317,3 +317,18 @@ def test_nonpositive_max_rows_clamped_to_at_least_one(db_path: Path, max_rows: i
     )
     assert result["row_count"] == 1
     assert result["truncated"] is True
+
+
+def test_unavailable_database_hides_server_paths(tmp_path: Path) -> None:
+    """Seeding/connect failures must become a clean ToolError, not leak the
+    absolute server-side path from a raw OSError / sqlite3.OperationalError."""
+    # A file where the parent directory should be makes mkdir/seed fail.
+    blocker = tmp_path / "blocked"
+    blocker.write_text("not a directory")
+    bad_path = blocker / "nested" / "demo.db"
+
+    with pytest.raises(ToolError) as err:
+        query_database("SELECT 1", 5, db_path=bad_path)
+    message = str(err.value)
+    assert str(tmp_path) not in message
+    assert "demo.db" not in message
