@@ -71,7 +71,7 @@ Claude Desktop sets no working directory for servers, so both paths must be abso
 
 ## Configuration
 
-Read from the process environment, no dotenv (see `.env.example`): `DATA_DIR` — sandbox root holding `search_index.json`, `demo.db` and `docs/` (default `./data`); `MCP_HOST` / `MCP_PORT` — HTTP transport bind (default `0.0.0.0:8082`).
+Read from the process environment, no dotenv (see `.env.example`): `DATA_DIR` — sandbox root holding `search_index.json`, `demo.db` and `docs/` (default `./data`); `MCP_HOST` / `MCP_PORT` — HTTP transport bind (default `0.0.0.0:8082`); `MCP_API_KEYS` — comma-separated bearer keys required by the HTTP transport (default `demo-key`; stdio is not gated — its client is whoever spawned the process).
 
 ## Notes
 
@@ -83,7 +83,7 @@ Read from the process environment, no dotenv (see `.env.example`): `DATA_DIR` �
 
 ## Testing
 
-97 tests, offline: units hit the pure functions directly; integration runs a real MCP client against the server in memory via the SDK's `create_connected_server_and_client_session` — tools, structured output, resources and error mapping included.
+106 tests, offline: units hit the pure functions directly (including the HTTP bearer gate through `httpx.ASGITransport`); integration runs a real MCP client against the server in memory via the SDK's `create_connected_server_and_client_session` — tools, structured output, resources and error mapping included.
 `make install-dev && make test`; `make lint` for ruff, `make typecheck` for strict mypy. CI runs lint + strict mypy + tests, a security job (pip-audit + bandit), and CodeQL; Dependabot keeps deps current. The seeded `data/` (demo.db, docs/, search_index.json) is resolved from the repo root by default; set `DATA_DIR` to relocate the sandbox.
 
 ---

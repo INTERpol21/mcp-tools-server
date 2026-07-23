@@ -6,6 +6,17 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-23
+
+### Added
+- Bearer auth on the streamable-HTTP transport: requests to `/mcp` must carry
+  `Authorization: Bearer <key>` with a key from `MCP_API_KEYS` (comma-separated,
+  default `demo-key` — the platform's shared offline key). Wrong or missing
+  keys get 401 with `WWW-Authenticate: Bearer`; comparison is constant-time.
+  stdio is deliberately not gated: its client is whoever spawned the process.
+  Previously the tools were reachable by anyone who could hit the port.
+  Pairs with agent-orchestrator 1.2.0, which sends the header.
+
 ## [1.0.0] - 2026-07-21
 
 First tagged release. An MCP server on the official Python SDK (FastMCP),

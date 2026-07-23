@@ -33,6 +33,10 @@ class Settings:
     data_dir: Path
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
+    # Accepted bearer keys for the HTTP transport (stdio is not gated: its
+    # client is whoever spawned the process). Same demo-key default as the
+    # sibling services.
+    api_keys: frozenset[str] = frozenset({"demo-key"})
 
     @property
     def index_path(self) -> Path:
@@ -59,4 +63,8 @@ def load_settings() -> Settings:
         port = int(raw_port)
     except ValueError as exc:
         raise RuntimeError(f"MCP_PORT must be an integer, got {raw_port!r}.") from exc
-    return Settings(data_dir=data_dir, host=host, port=port)
+    raw_keys = os.environ.get("MCP_API_KEYS", "demo-key")
+    api_keys = frozenset(key.strip() for key in raw_keys.split(",") if key.strip())
+    if not api_keys:
+        raise RuntimeError("MCP_API_KEYS must contain at least one non-empty key.")
+    return Settings(data_dir=data_dir, host=host, port=port, api_keys=api_keys)
