@@ -13,6 +13,9 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.11.7"
+          # Test on the interpreter the Docker image ships (python:3.14-slim) —
+          # without this, the suite runs on whatever the runner has.
+          python-version: "3.14"
       - run: uv sync --frozen
       # requirements.txt is exported from uv.lock and is what the Docker image
       # installs from — the lockfile itself is never read at image build time.
@@ -34,6 +37,9 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.11.7"
+          # Test on the interpreter the Docker image ships (python:3.14-slim) —
+          # without this, the suite runs on whatever the runner has.
+          python-version: "3.14"
       - run: uv sync --frozen
       - name: pip-audit (dependency CVEs)
         run: uv run --with pip-audit pip-audit -r requirements.txt
