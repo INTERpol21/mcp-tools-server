@@ -44,9 +44,14 @@ class BearerAuthMiddleware:
         headers: dict[bytes, bytes] = dict(scope.get("headers") or [])
         scheme, _, token = headers.get(b"authorization", b"").decode("latin-1").partition(" ")
         token = token.strip()
-        authorized = scheme.lower() == "bearer" and any(
-            secrets.compare_digest(token, key) for key in self._api_keys
-        )
+        # Compare against EVERY key, never short-circuiting: ``any()`` returns
+        # on the first match, so validation time would leak which key matched.
+        # Same strict contract as the gateway and orchestrator.
+        matched = False
+        for key in self._api_keys:
+            if secrets.compare_digest(token, key):
+                matched = True
+        authorized = scheme.lower() == "bearer" and matched
         if authorized:
             await self._app(scope, receive, send)
             return
