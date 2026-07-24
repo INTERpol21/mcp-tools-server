@@ -88,7 +88,7 @@ Read from the process environment, no dotenv (see `.env.example`): `DATA_DIR` �
 
 ---
 
-MIT. Portfolio demo — siblings: [llm-gateway](https://github.com/INTERpol21/llm-gateway) · [rag-pgvector](https://github.com/INTERpol21/rag-pgvector) · [agent-orchestrator](https://github.com/INTERpol21/agent-orchestrator), which calls this server's `search_web` over HTTP.
+MIT. Portfolio demo — siblings: [llm-gateway](https://github.com/INTERpol21/llm-gateway) · [rag-pgvector](https://github.com/INTERpol21/rag-pgvector) · [agent-orchestrator](https://github.com/INTERpol21/agent-orchestrator), which calls this server's `search_web` over HTTP. **Run the whole platform** (all four services + web console + Postgres/Redis behind one origin) from the umbrella compose in [llm-platform-console](https://github.com/INTERpol21/llm-platform-console) — `docker compose up --build` there brings everything up offline on mock models.
 
 ## Releases
 
