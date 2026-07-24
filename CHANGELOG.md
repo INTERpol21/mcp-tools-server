@@ -6,6 +6,13 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-24
+
+### Fixed
+- Bearer-key comparison no longer short-circuits: every configured key is
+  checked with `secrets.compare_digest`, closing the timing side-channel and
+  matching the strict contract the gateway and orchestrator keep.
+
 ## [1.1.0] - 2026-07-23
 
 ### Added

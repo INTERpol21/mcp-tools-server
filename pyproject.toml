@@ -1,6 +1,6 @@
 [project]
 name = "mcp-tools-server"
-version = "1.1.0"
+version = "1.1.1"
 description = "MCP server (FastMCP): offline web search, read-only SQL and a sandboxed filesystem, over stdio and streamable HTTP."
 requires-python = ">=3.10"
 dependencies = [
